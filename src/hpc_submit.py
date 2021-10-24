@@ -12,7 +12,7 @@ out_path = os.path.join(data_path, 'output')
 
 N = int(sys.argv[1])
 
-submit_prefix = 'sbatch --cpus-per-task=1 --time=24:00:00 --partition=ccr,norm --mem=16g'
+submit_prefix = 'sbatch --cpus-per-task=1 --time=24:00:00 --partition=ccr,norm --mem=128g'
 
 if not os.path.exists(log_path): os.mkdir(log_path)
 if not os.path.exists(out_path): os.mkdir(out_path)

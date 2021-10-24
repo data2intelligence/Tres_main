@@ -49,13 +49,9 @@ for sub_type in ['ABC', 'GCB']:
 # custom single cell cohorts
 datasets = [    
     # small datasets first
-    'Melanoma.GSE115978',
-    
+    'Melanoma.GSE115978',    
     'Head_Neck.GSE103322',
-    'Glioblastoma.GSE131928',
-    
     'Colorectal.GSE108989',
-    
     'Liver.GSE98638',
     'Liver.GSE140228',
     'Colorectal.GSE146771', 
