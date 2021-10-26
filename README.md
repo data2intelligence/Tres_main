@@ -9,14 +9,14 @@ We used the NIH high performance cluster (HPC) for parallel computation as "./hp
 The output will be available in data/output, named with the cancer type followed with database accession ID.  
 
 # Stage 2: merge computation scores into signature files  
-After computing the correlation results for each dataset, you can run "./run.py" to generate the merged Tres signature files below:  
+After computing the correlation results for each dataset, you can run "./run.py" to generate the merged Tres signature files in data/output:  
 1, merge.TGFB1, merge.TRAIL, merge.PGE2: Median signatures among all samples for each dataset.  
 2, merge.Median: Median signatures among all immunosuppressive signals enumerated above.  
 3, merge.Median.AUC: Area under the ROC curve to measure the quality signatures in "merge.Median", using T-cell persistance markers (Krishna et al., Science 2021) as the evaluation standard.  
 4, merge.Median.signature: One overall Tres signature, which is the median among datasets with AUC > 0.7 in "merge.Median".  
 
 # Stage 3: predict clinical response of immune checkpoint blockade, CAR T, and adoptive cell transfer  
-After creating the Tres signature, you can run "./predict.py" to evaluate qualities of therapy response predictions (Figure 2 in the manuscript). All results files are named as Validation.*.pdf.  
+After creating the Tres signature, you can run "./predict.py" to evaluate qualities of therapy response predictions (Figure 2 in the manuscript). All results files are named as Validation.*.pdf in data/output.  
 
 **Task 1**: predict responder versus non-responder status:  
 This task will analyze cohorts: ICB\_Caushi2021, ICB\_SadeFeldman2018.Exhausted.Post, ICB\_SadeFeldman2018.Exhausted.Pre, CD19CAR_Fraietta2018.  
