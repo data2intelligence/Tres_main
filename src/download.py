@@ -11,8 +11,7 @@ src_path = os.path.join(base_path, 'src')
 
 url = 'https://hpc.nih.gov/~Jiang_Lab/Tres'
 
-# 'sc_cohorts.tar', 
-for f in ['validation.tar']:
+for f in ['sc_cohorts.tar', 'validation.tar']:
     out = os.path.join(data_path, f + '.gz')
     
     urllib.request.urlretrieve(os.path.join(url, f + '.gz'), out)
