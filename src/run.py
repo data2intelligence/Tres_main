@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-
-import os, sys, pathlib
+import os, sys, pathlib, pandas
+from sklearn.metrics import roc_auc_score
 
 base_path = pathlib.Path(__file__).parent.absolute()
 base_path = os.path.dirname(base_path)
-
 data_path = os.path.join(base_path, 'data')
-
+input_path = os.path.join(data_path, 'sc_cohorts')
+output_path = os.path.join(data_path, 'output')
+    
 
 # Cancer Set
 dataset_Tumor_CD8 = [
@@ -72,10 +73,92 @@ datasets = [
     'DLBCL.GSE182434',
 ]
 
-def main():
-    input_path = os.path.join(data_path, 'sc_cohorts')
-    output_path = os.path.join(data_path, 'output')
+
+
+def median_merge(output_path):
+    output = os.path.join(output_path, 'merge')
+
+    lst = []
     
+    pivots = ['TGFB1', 'TRAIL', 'PGE2']
+        
+    for pivot in pivots:
+        merge = []
+        
+        # extract CD8 T cells
+        for dataset, cell_pivot, sub_title in dataset_Tumor_CD8:
+            result = pandas.read_csv(os.path.join(output_path, dataset), sep='\t', index_col=0)
+            
+            flag = [(v.find('t.' + cell_pivot) == 0 and v.split('.')[-1] == pivot) for v in result.columns]
+            assert sum(flag) > 0
+            
+            result = result.loc[:, flag]
+            assert result.columns.value_counts().max() == 1 # if sample ID extraction is correct, must have no redundancy
+            
+            if sub_title is not None: dataset += ('.' + sub_title)        
+            
+            result = result.loc[result.isnull().mean(axis=1) < 0.5]
+            result = result.median(axis=1)
+            result.name = dataset
+                
+            merge.append(result)
+        
+        merge = pandas.concat(merge, axis=1, join='outer', sort=False)
+        assert merge.columns.value_counts().max() == 1
+        
+        merge.to_csv(output + '.' + pivot, sep='\t', index_label=False)
+        lst.append(merge)
+    
+    # create median signature across three immuno-suppressive signals    
+    merge = pandas.concat(lst, axis=1, join='inner')
+    
+    cnt_map = merge.columns.value_counts()
+    assert sum(cnt_map != len(pivots)) == 0
+    
+    merge = merge.groupby(merge.columns, axis=1).median()
+    merge.to_csv(output + '.Median', sep='\t', index_label=False)
+
+
+
+
+def ROC_AUC_set(arr, logFC):
+    common = arr.index.intersection(logFC.index)
+    arr = arr.loc[common]
+    logFC = logFC.loc[common]
+        
+    return roc_auc_score(logFC > 0, arr)
+
+
+def compute_signature_AUC():
+    qthres = 0.05
+    logFC_thres = 0.5
+    null_thres = 0.5
+    AUC_thres = 0.7
+    
+    signature = pandas.read_excel(os.path.join(data_path, 'signature', 'Tpersistance.Krishna2020.xlsx'), index_col=0)
+    signature = signature.loc[signature['FDR'] < qthres, 'logFC']
+    signature = signature.loc[signature.abs() > logFC_thres]    
+    
+    print('Pos, Neg = %d, %d' % (sum(signature > 0), sum(signature < 0)))
+    
+    output = os.path.join(output_path, 'merge.Median')
+    
+    result = pandas.read_csv(output, sep='\t', index_col=0)
+    result = result.loc[result.isnull().mean(axis=1) < null_thres]
+    
+    AUC = result.apply(lambda v: ROC_AUC_set(v.dropna(), signature)).sort_values(ascending=False)
+    AUC.name = 'AUC'
+    AUC.to_csv(output + '.AUC', sep='\t', index_label=False)
+    
+    # create a median signature across all dataset for prediction purpose later
+    signature = result.loc[:, AUC.index[AUC > AUC_thres]].dropna().median(axis=1)
+    signature.name = 'Tres'
+    signature.to_csv(output + '.signature', sep='\t', index_label=False)
+
+
+
+
+def main():
     if len(sys.argv) == 3:    
         inx, Nnode = int(sys.argv[1]), int(sys.argv[2])
         assert Nnode == len(datasets)
@@ -86,8 +169,8 @@ def main():
         os.system(' '.join(['Tres.py -n 1', '-i', os.path.join(input_path, dataset + '.pickle.gz'), '-o', output]))
     
     elif len(sys.argv) == 1:
-        print('merge')
-    
+        median_merge(output_path)
+        compute_signature_AUC()
     else:
         sys.stderr.write('Error parameter input.\n')
         return 1

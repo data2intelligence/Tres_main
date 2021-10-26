@@ -11,14 +11,14 @@ src_path = os.path.join(base_path, 'src')
 
 url = 'https://hpc.nih.gov/~Jiang_Lab/Tres'
 
-for f in ['sc_cohorts.tar']:
-    urllib.request.urlretrieve(os.path.join(url, f + '.gz'), os.path.join(data_path, f + '.gz'))
+# 'sc_cohorts.tar', 
+for f in ['validation.tar']:
+    out = os.path.join(data_path, f + '.gz')
+    
+    urllib.request.urlretrieve(os.path.join(url, f + '.gz'), out)
 
-# expand TCGA and GTEx cohorts
-f = os.path.join(data_path, 'sc_cohorts.tar.gz')
-
-my_tar = tarfile.open(f)
-my_tar.extractall(data_path)
-my_tar.close()
-
-os.remove(f)
+    my_tar = tarfile.open(out)
+    my_tar.extractall(data_path)
+    my_tar.close()
+    
+    os.remove(out)
