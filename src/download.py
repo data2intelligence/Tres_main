@@ -9,15 +9,15 @@ base_path = os.path.dirname(base_path)
 data_path = os.path.join(base_path, 'data')
 src_path = os.path.join(base_path, 'src')
 
-url = 'https://hpc.nih.gov/~Jiang_Lab/Tres'
-
-for f in ['sc_cohorts.tar', 'validation.tar']:
-    out = os.path.join(data_path, f + '.gz')
+for url in ['https://hpc.nih.gov/~Jiang_Lab/Tres/sc_cohorts.tar.gz', 'https://tres.data2intelligence.net/download/plots/evaluation.pickle.gz/']:
+    f = os.path.basename(url.rstrip('/'))
     
-    urllib.request.urlretrieve(os.path.join(url, f + '.gz'), out)
-
-    my_tar = tarfile.open(out)
-    my_tar.extractall(data_path)
-    my_tar.close()
+    out = os.path.join(data_path, f)
+    urllib.request.urlretrieve(url, out)
     
-    os.remove(out)
+    if url.find('.tar.gz') > 0:
+        my_tar = tarfile.open(out)
+        my_tar.extractall(data_path)
+        my_tar.close()
+        
+        os.remove(out)

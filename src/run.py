@@ -10,74 +10,66 @@ output_path = os.path.join(data_path, 'output')
     
 
 # Cancer Set
-dataset_Tumor_CD8 = [
-    ['Glioblastoma.GSE163108.10x', 'CD8+_recurrent', None],
-    
-    ['Uveal.GSE139829', 'Cytotoxic CD8', None],
-    
-    ['Colorectal.GSE108989', 'TTC', None],
-    
-    ['Colorectal.GSE146771', 'T_CD8 T cell', None],
-    ['Colorectal.GSE146771.10x', 'T_CD8 T cell', None],
-    
-    ['Head_Neck.GSE103322', 'Tumor_T cell', None],
-    
-    ['Liver.GSE125449', 'T cell', None],
-    
-    ['Liver.GSE98638', 'TTC', None],
-       
-    ['Liver.GSE140228', 'Tumor_CD8', None],
-    ['Liver.GSE140228.10x', 'Tumor_CD8', None],
-        
-    ['NSCLC.GSE99254', 'TTC', None],
-    ['Breast.GSE114725', 'TUMOR_T:CD8+EM', None],
-]
-
-for location in ['Core', 'Middle', 'Edge']:
-    dataset_Tumor_CD8.append(['NSCLC.E-MTAB-6149', '%s_T CD8' % location, location])
-
-for ttime in ['Naive', 'Post']:
-    dataset_Tumor_CD8.append(['Melanoma.GSE115978', '%s_T_CD8' % ttime, ttime])
-
-for sub_type in ['ER+', 'HER2+', 'TNBC']:
-    dataset_Tumor_CD8.append(['Breast.GSE176078', '%s_T cells CD8+' % sub_type, sub_type])
-
-for sub_type in ['ABC', 'GCB']:
-    dataset_Tumor_CD8.append(['DLBCL.GSE182434', 'DLBCL-%s_T cells CD8' % sub_type, sub_type])
-
-
+dataset_Tumor_CD8 = []
 
 # custom single cell cohorts
-datasets = [    
-    # small datasets first
-    'Melanoma.GSE115978',    
-    'Head_Neck.GSE103322',
-    'Colorectal.GSE108989',
-    'Liver.GSE98638',
-    'Liver.GSE140228',
-    'Colorectal.GSE146771', 
+datasets = []
+
+platform_map = {}
+cancer_map = {}
+
+
+def load_single_cell_datasets():
+    """
+    Fill in dataset information from the catalog
+    """
     
-    'NSCLC.GSE99254',
-    'Breast.GSE114725',
-    'Liver.GSE125449', # 10x small dataset
+    catalog = pandas.ExcelFile(os.path.join(data_path, 'sc_cohorts', 'catalog.xlsx'), engine='openpyxl')
     
-    ################################################
-    # 10x region, lots of cells
-    'Breast.GSE176078',
-    'Glioblastoma.GSE163108.10x',
-    'Liver.GSE140228.10x',
-    'Colorectal.GSE146771.10x',
-    'NSCLC.E-MTAB-6149',
-    'Uveal.GSE139829',
+    for category in catalog.sheet_names:
+        data = pandas.read_excel(catalog, category, index_col=0)
+        data = data.loc[~data['Cancer'].isnull()] # in case any null rows
+        
+        for title, info in data.iterrows():            
+            f = os.path.join(data_path, 'sc_cohorts', title + '.pickle.gz')
+            assert os.path.exists(f)
+            
+            datasets.append([title, f])        
+            platform_map[title] = info['Platform']
+            cancer_map[title] = info['Cancer']
+            
+            # all na fields as non-existing
+            info = info.dropna()
+                    
+            Subcohort = None
+            if 'Subcohort' in info.index:
+                Subcohort = info['Subcohort'].split(',')
+                for i, v in enumerate(Subcohort):
+                    v = Subcohort[i] = v.strip()
+                    platform_map[title + '.' + v] = info['Platform']
+            
+            if 'CD8' in info.index:
+                pivot = info['CD8']
+                
+                if Subcohort is None:
+                    dataset_Tumor_CD8.append([title, pivot, None])
+                else:
+                    for v in Subcohort: dataset_Tumor_CD8.append([title, v + '_' + pivot, v])
     
-    'DLBCL.GSE182434',
-]
+    catalog.close()
+
+
+def strip_cancer_type_list(lst):
+    return [v.split('_')[0].split('.')[0] if v.find('Liver') < 0 else v.split('_')[0].split('.', 1)[1] for v in lst]
 
 
 
 def median_merge(output_path):
+    qthres = 0.05
+    frac_thres = 1e-3
+    
     output = os.path.join(output_path, 'merge')
-
+    
     lst = []
     
     pivots = ['TGFB1', 'TRAIL', 'PGE2']
@@ -89,18 +81,49 @@ def median_merge(output_path):
         for dataset, cell_pivot, sub_title in dataset_Tumor_CD8:
             result = pandas.read_csv(os.path.join(output_path, dataset), sep='\t', index_col=0)
             
-            flag = [(v.find('t.' + cell_pivot) == 0 and v.split('.')[-1] == pivot) for v in result.columns]
+            # focus on current pivot
+            flag = [(v.split('.')[-1] == pivot) for v in result.columns]
             assert sum(flag) > 0
             
             result = result.loc[:, flag]
-            assert result.columns.value_counts().max() == 1 # if sample ID extraction is correct, must have no redundancy
+            result = result.loc[result.isnull().mean(axis=1) < 1]
             
-            if sub_title is not None: dataset += ('.' + sub_title)        
+            # extract t-values
+            flag = [(v.find('t.' + cell_pivot) == 0) for v in result.columns]
+            assert sum(flag) > 0
             
-            result = result.loc[result.isnull().mean(axis=1) < 0.5]
-            result = result.median(axis=1)
-            result.name = dataset
-                
+            result_t = result.loc[:, flag]
+            
+            # strip t and pivot
+            result_t.columns = ['.'.join(v.split('.')[1:-1]) for v in result_t.columns]
+            assert result_t.columns.value_counts().max() == 1 # if sample ID extraction is correct, must have no redundancy
+            
+            # extract q-values
+            flag = [(v.find('q.' + cell_pivot) == 0) for v in result.columns]
+            assert sum(flag) > 0
+            
+            result_q = result.loc[:, flag]
+            
+            # strip t and pivot
+            result_q.columns = ['.'.join(v.split('.')[1:-1]) for v in result_q.columns]
+            assert result_q.columns.value_counts().max() == 1 # if sample ID extraction is correct, must have no redundancy
+            
+            flag = (result_q < qthres).mean() > frac_thres
+            
+            if flag.sum() == 0:
+                # nothing to include
+                continue
+            
+            result = result_t.loc[:, flag]
+            
+            cancer = cancer_map[dataset]
+            if sub_title is not None: cancer += ('.' + sub_title)        
+            
+            result.columns = cancer + '_' + dataset + '_' + result.columns
+            #result = result.loc[result.isnull().mean(axis=1) < 0.5]
+            #result = result.median(axis=1)
+            #result.name = cancer + '_' + dataset
+            
             merge.append(result)
         
         merge = pandas.concat(merge, axis=1, join='outer', sort=False)
@@ -109,6 +132,20 @@ def median_merge(output_path):
         merge.to_csv(output + '.' + pivot, sep='\t', index_label=False)
         lst.append(merge)
     
+    # create an average score as Tres score
+    common_col = None
+    
+    for result in lst:
+        print(result.shape)    
+        # get single cells that are profiled by all signals
+        if common_col is None:
+            common_col = result.columns
+        else:
+            common_col = common_col.intersection(result.columns)
+    
+    print(common_col.shape)
+    for i, result in enumerate(lst): lst[i] = result.loc[:, common_col]
+
     # create median signature across three immuno-suppressive signals    
     merge = pandas.concat(lst, axis=1, join='inner')
     
@@ -116,7 +153,28 @@ def median_merge(output_path):
     assert sum(cnt_map != len(pivots)) == 0
     
     merge = merge.groupby(merge.columns, axis=1).median()
+    print(merge.shape)
+    
     merge.to_csv(output + '.Median', sep='\t', index_label=False)
+
+    # create cancer-level merge
+    #merge = pandas.read_csv(output + '.Median', sep='\t', index_col=0)
+    merge = merge.loc[merge.isnull().mean(axis=1) < 0.5]
+    print(merge.shape)
+    
+    # don't merge liver cancer
+    flag = strip_cancer_type_list(merge.columns)
+    
+    merge = merge.groupby(flag, axis=1).median()
+    merge.to_csv(output, sep='\t', index_label=False)
+    
+    # create a median signature across all dataset for prediction purpose later
+    merge = merge.dropna().median(axis=1)
+    merge.name = 'Tres'
+    merge.to_csv(output + '.signature', sep='\t', index_label=False)
+
+
+    
 
 
 
@@ -133,7 +191,6 @@ def compute_signature_AUC():
     qthres = 0.05
     logFC_thres = 0.5
     null_thres = 0.5
-    AUC_thres = 0.7
     
     signature = pandas.read_excel(os.path.join(data_path, 'signature', 'Tpersistance.Krishna2020.xlsx'), index_col=0)
     signature = signature.loc[signature['FDR'] < qthres, 'logFC']
@@ -149,24 +206,21 @@ def compute_signature_AUC():
     AUC = result.apply(lambda v: ROC_AUC_set(v.dropna(), signature)).sort_values(ascending=False)
     AUC.name = 'AUC'
     AUC.to_csv(output + '.AUC', sep='\t', index_label=False)
-    
-    # create a median signature across all dataset for prediction purpose later
-    signature = result.loc[:, AUC.index[AUC > AUC_thres]].dropna().median(axis=1)
-    signature.name = 'Tres'
-    signature.to_csv(output + '.signature', sep='\t', index_label=False)
 
 
 
 
 def main():
-    if len(sys.argv) == 3:    
+    load_single_cell_datasets()
+    
+    if len(sys.argv) == 3:
         inx, Nnode = int(sys.argv[1]), int(sys.argv[2])
         assert Nnode == len(datasets)
         
-        dataset = datasets[inx]
+        dataset, f = datasets[inx]
         
         output = os.path.join(output_path, dataset)
-        os.system(' '.join(['Tres.py -n 1', '-i', os.path.join(input_path, dataset + '.pickle.gz'), '-o', output]))
+        os.system(' '.join(['Tres.py -n 1', '-i', f, '-o', output]))
     
     elif len(sys.argv) == 1:
         median_merge(output_path)

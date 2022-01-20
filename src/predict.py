@@ -5,6 +5,7 @@ import pandas
 import matplotlib.pyplot as plt
 import sklearn.metrics as metrics
 import scipy.stats as stats
+import pickle
 
 from sklearn.metrics import roc_auc_score
 
@@ -70,303 +71,121 @@ def ROC_plot(data_lst, output=None, flag_sort=False):
 
 
 
-############################################################
-# one function for each dataset
-def predict_ICB_Caushi2021_response(signature):
-    output = os.path.join(output_path, 'Validation.ICB_Caushi2021')
-    
-    expression = pandas.read_csv(os.path.join(data_path, 'validation', 'GSE176021.tumor_MANA.gz'), sep='\t', index_col=0)
-    expression = expression.subtract(expression.mean(axis=1), axis=0)
-    
-    flag = pandas.Series([v.split('.')[0] == 'MPR' for v in expression.columns], index=expression.columns, name='Response')
-    correlation = signature.apply(lambda v: expression.corrwith(v))
-    
-    data_lst = []
-        
-    fig = plt.figure(figsize = (0.5*figure_width, figure_width), frameon=False)
-    
-    for title, arr in correlation.items():
-        in_arr, out_arr = arr.loc[flag], arr.loc[~flag]    
-        z, p = stats.ranksums(in_arr, out_arr)
-        auc = roc_auc_score(flag, arr)
-            
-        incnt, outcnt = sum(flag), sum(~flag)
-        
-        print(title, auc, z, p, incnt, outcnt)
-        
-        data_lst.append([title, flag, arr])
-            
-        if title == 'Tres':
-            boxplot_one(plt, in_arr, 0, 'red', marker='o')
-            boxplot_one(plt, out_arr, 1, 'blue', marker='v')
-                
-            plt.text(0, in_arr.min(), incnt, horizontalalignment='center', fontsize=30)
-            plt.text(1, out_arr.min(), outcnt, horizontalalignment='center', fontsize=30)
-                    
-            plt.title('P = %.1e' % p, fontsize=font_size)
-    
-    plt.xticks([0, 1], ['Responder', 'Non'], rotation=30, ha='right')
-    
-    plt.ylabel('Correlation')
-    plt.tick_params(pad=10)
-        
-    fig.savefig(output + '.boxplot.pdf', bbox_inches='tight', transparent=True)
-    plt.close(fig)
-        
-    ROC_plot(data_lst, output + '.ROC')
-
-
-
-def predict_ICB_SadeFeldman2018_response(signature):
-    output = os.path.join(output_path, 'Validation.ICB_SadeFeldman2018')
-    
-    expression = os.path.join(data_path, 'validation', 'Melanoma.GSE120575.merge.pickle.gz')
-    expression = pandas.read_pickle(expression)
-    expression = expression.subtract(expression.mean(axis=1), axis=0)
-    
-    included = ['Exhausted T_CD8', 'Lymphocyte exhausted/cell cycle']
-    flag = [('Exhausted.' + v.split('.',1)[1] if v.split('.')[0] in included else v) for v in expression.columns]
-    expression = expression.groupby(flag, axis=1).median()
-    
-    correlation = signature.apply(lambda v: expression.corrwith(v))
-    
-    flag = [v.split('.')[0] + '.' + v.split('.')[1].split('_')[0] for v in correlation.index]
-    correlation_group = correlation.groupby(flag)
-    
-    for cell_type in ['Exhausted.Pre', 'Exhausted.Post']:
-        fig = plt.figure(figsize = (0.5*figure_width, figure_width), frameon=False)
-            
-        correlation = correlation_group.get_group(cell_type)
-        flag = pandas.Series([v.split('-')[-1] == 'R' for v in correlation.index], index=correlation.index, name='Response')
-            
-        data_lst = []
-            
-        for title, arr in correlation.items():
-            in_arr, out_arr = arr.loc[flag], arr.loc[~flag]
-            z, p = stats.ranksums(in_arr, out_arr)
-            auc = roc_auc_score(flag, arr)
-            incnt, outcnt = sum(flag), sum(~flag)
-        
-            print(cell_type, title, auc, z, p, incnt, outcnt)
-            data_lst.append([title, flag, arr])
-                
-            if title == 'Tres':
-                boxplot_one(plt, in_arr, 0, 'red', marker='o')
-                boxplot_one(plt, out_arr, 1, 'blue', marker='v')
-                    
-                plt.text(0, in_arr.max(), incnt, horizontalalignment='center', fontsize=30)
-                plt.text(1, out_arr.max(), outcnt, horizontalalignment='center', fontsize=30)
-                
-                plt.title('P = %.1e' % p, fontsize=font_size)
-
-        plt.xticks([0, 1], ['Responder', 'Non'], rotation=30, ha='right')
-        plt.ylabel('Correlation')
-        plt.tick_params(pad=10)
-            
-        out = output + '.' + cell_type
-        fig.savefig(out + '.boxplot.pdf', bbox_inches='tight', transparent=True)
-        plt.close(fig)
-            
-        ROC_plot(data_lst, out + '.ROC')
-
-
-
-def predict_CD19CAR_Fraietta2018_response(signature):
-    fprefix = os.path.join(data_path, 'validation', 'CD19CAR_Fraietta2018')
-    output = os.path.join(output_path, 'Validation.CD19CAR_Fraietta2018')
-    
-    responder = pandas.read_csv(fprefix + '.responders', sep='\t', index_col=0)
-    responder = responder.index[responder['Best Overall Response'].apply(lambda v: v in ['CR', 'PRTD'])]
-    
-    # Infusion product transcriptomics
-    expression = pandas.read_csv(fprefix + '.CAR.self_subtract.gz', sep='\t', index_col=0)
-    correlation = signature.apply(lambda v: expression.corrwith(v))
-        
-    flag = pandas.Series([v in responder for v in correlation.index], index=correlation.index, name='Responder')
-        
-    data_lst = []
-        
-    for title, arr in correlation.items():
-        in_arr, out_arr = arr.loc[flag], arr.loc[~flag]    
-        z, p = stats.ranksums(in_arr, out_arr)
-        auc = roc_auc_score(flag, arr)
-            
-        incnt, outcnt = sum(flag), sum(~flag)
-        print(title, auc, z, p, incnt, outcnt)
-            
-        data_lst.append([title, flag, arr])
-            
-        if title == 'Tres':
-            fig = plt.figure(figsize = (0.5*figure_width, figure_width), frameon=False)
-            boxplot_one(plt, in_arr, 0, 'red', marker='o')
-            boxplot_one(plt, out_arr, 1, 'blue', marker='v')
-                
-            plt.text(0, in_arr.min(), incnt, horizontalalignment='center', fontsize=30)
-            plt.text(1, out_arr.min(), outcnt, horizontalalignment='center', fontsize=30)
-            
-            plt.title('P = %.1e' % p, fontsize=font_size)
-            plt.xticks([0, 1], ['Responder', 'Non'], rotation=30, ha='right')
-            plt.ylabel('Correlation')
-            plt.tick_params(pad=10)
-    
-            fig.savefig(output + '.boxplot.pdf', bbox_inches='tight', transparent=True)
-            plt.close(fig)
-                
-    ROC_plot(data_lst, output + '.ROC')
-
-
-
-
-def predict_CD19CAR_Chen2021_response(signature):
-    margin = 0.05
-    metric_type = 'Tres'
-    
-    fprefix = os.path.join(data_path, 'validation', 'CD19CAR_Chen2021')
-    output = os.path.join(output_path, 'Validation.CD19CAR_Chen2021')
-    
-    # Predict CAR-T response through pre-manufecture    
-    clinical = pandas.read_csv(fprefix + '.clinical', sep='\t', index_col=0)
-    data = pandas.read_csv(fprefix + '.self_subtract.gz', sep='\t', index_col=0)
-    data_groups = data.groupby([v.split('.')[-1] for v in data.columns], axis=1)
-    
-    # always add some penalty in case perfect separation    
-    cf = CoxPHFitter(penalizer=1e-3)
-    kmf = KaplanMeierFitter()
-    
-    pdf = PdfPages(output + '.example.pdf')
-        
-    for cell_type, data in data_groups:
-        data.columns = [v.split('.')[0] for v in data.columns]
-        correlation = signature.apply(lambda v: data.corrwith(v))
-        
-        arr = correlation[metric_type]
-        
-        data = pandas.concat([clinical[['BCA_MONTHS', 'BCELL_RECOVERY', 'AGE']], arr], axis=1, join='inner')
-        cf.fit(data, data.columns[0], event_col=data.columns[1])
-                
-        # plot here
-        if cell_type == 'Average':        
-            fig = plt.figure(figsize = (figure_width, figure_width), frameon=False)
-            
-            flag = (data.iloc[:,-1] > 0)
-            kmf.fit(data.iloc[:,0].loc[flag], data.iloc[:,1].loc[flag], label='%s > 0 (n=%d)' % (metric_type.split()[0], sum(flag)))
-            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='solid', color='red')
-                    
-            kmf.fit(data.iloc[:,0].loc[~flag], data.iloc[:,1].loc[~flag], label='%s < 0 (n=%d)' % (metric_type.split()[0], sum(~flag)))
-            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='dashdot', color='blue')
-    
-            p = cf.summary.loc[metric_type, 'p']
-            p = p/2 # convert two-sided to one-sided p-values
-            plt.text(data.iloc[:,0].median(), 0.9, 'P = %.1e' % p)
-                    
-            plt.title(cell_type, fontsize=font_size)
-            plt.xlabel('Bcell aplasia survival (month)')
-            plt.ylabel('Fraction')
-            plt.legend(frameon=False)
-                    
-            plt.tick_params(pad=10)
-            plt.ylim([0 - margin,1 + margin])
-                    
-            pdf.savefig(fig, bbox_inches='tight', transparent=True)
-            plt.close(fig)
-    
-    pdf.close()
-
-
-
-
-def predict_ACT_Lauss2017_response(signature):
-    margin = 0.05
-    metric_type = 'Tres'
-    
-    fprefix = os.path.join(data_path, 'validation', 'Lauss2017')
-    output = os.path.join(output_path, 'Validation.ACT_Lauss2017')
-    
-    expression = pandas.read_csv(fprefix + '.self_subtract.gz', sep='\t', index_col=0)
-    correlation = signature.apply(lambda v: expression.corrwith(v))
-    
-    CTL = expression.loc[['CD8A', 'CD8B', 'GZMA', 'GZMB', 'PRF1']].median()
-    CTL.name = 'CTL'
-    
-    # add a little penalty to fix the perfection separation here
-    cf = CoxPHFitter(penalizer=1e-3)
-    kmf = KaplanMeierFitter()
-    
-
-    pdf = PdfPages(output + '.pdf')
-    
-    for surv_type in ['OS', 'PFS']:
-        clinical = pandas.read_csv(fprefix + '.' + surv_type, sep='\t', index_col=0)
-    
-        arr = correlation[metric_type]
-                
-        # separate CTL level analysis
-        for CTL_type, CTL_flag in [
-            ['CTL > 0', (CTL > 0)],
-            ['CTL < 0', (CTL < 0)],
-            ]:
-                
-            # only look at CTL rich samples
-            data = pandas.concat([clinical, arr.loc[CTL_flag]], axis=1, join='inner')
-            cf.fit(data, data.columns[0], event_col=data.columns[1])
-            
-            
-            fig = plt.figure(figsize = (figure_width, figure_width), frameon=False)
-                    
-            flag = (data.iloc[:,-1] > 0)
-            kmf.fit(data.iloc[:,0].loc[flag], data.iloc[:,1].loc[flag], label='%s > 0 (n=%d)' % (metric_type.split()[0], sum(flag)))
-            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='solid', color='red')
-
-            kmf.fit(data.iloc[:,0].loc[~flag], data.iloc[:,1].loc[~flag], label='%s < 0 (n=%d)' % (metric_type.split()[0], sum(~flag)))
-            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='dashdot', color='blue')
-                
-            p = cf.summary.loc[metric_type, 'p']
-            p /= 2 # convert two-sided p-value to one-side pvalue
-            
-            plt.title('%s : P = %.1e' % (CTL_type, p), fontsize=font_size)
-                    
-            if surv_type == 'OS':
-                plt.xlabel('Overall survival (month)')
-            elif surv_type == 'PFS':
-                plt.xlabel('Prog-free survival (month)')
-            else:
-                plt.xlabel(surv_type + ' (month)')
-                    
-            plt.ylabel('Fraction')
-            plt.legend(frameon=False)
-            
-            plt.tick_params(pad=10)
-            plt.ylim([0 - margin,1 + margin])
-                    
-            pdf.savefig(fig, bbox_inches='tight', transparent=True)
-            plt.close(fig)
-    
-    pdf.close()
-
-
 
 def main():
     # create a prediction signature with Tres and Tpersistance
     merge = []
     
-    signature = pandas.read_csv(os.path.join(output_path, 'merge.Median.signature'), sep='\t', index_col=0)['Tres']
+    signature = pandas.read_csv(os.path.join(output_path, 'merge.signature'), sep='\t', index_col=0)['Tres']
     merge.append(signature)
 
     signature = pandas.read_excel(os.path.join(data_path, 'signature', 'Tpersistance.Krishna2020.xlsx'), index_col=0)
     signature = signature.loc[:, 'logFC']
     signature.name = 'T Persistance'
-    merge.append(signature)    
-
+    merge.append(signature)
+    
+    signature = pandas.read_csv(os.path.join(data_path, 'signature', 'GSE23321.diff.gz'), sep='\t', index_col=0)['Tscm']
+    merge.append(signature)
+    
     signature = pandas.concat(merge, axis=1, join='outer')
     
-    # validation and performance comparison by ROC curves
-    predict_ICB_Caushi2021_response(signature)
-    predict_ICB_SadeFeldman2018_response(signature)
-    predict_CD19CAR_Fraietta2018_response(signature)
+    fin = open(os.path.join(data_path, 'evaluation.pickle.gz'), 'rb') 
+    data_lst = pickle.load(fin)
     
-    # survival analysis using pre-manufacture data
-    predict_CD19CAR_Chen2021_response(signature)
-    predict_ACT_Lauss2017_response(signature)
+    for treatment, timepoint, cohort, cancer, response, data, compare_lst in data_lst:
+        title = '%s_%s_%s_%s' % (treatment, timepoint, cohort, cancer)
+        print(title)
+        
+        output = os.path.join(output_path, title)
+        
+        correlation = signature.apply(lambda v: data.corrwith(v))
+        
+        common = correlation.index.intersection(response.index)
+        response = response.loc[common]
+        correlation = correlation.loc[common]
+        
+        if type(response) == pandas.Series:
+            fig = plt.figure(figsize = (0.6*figure_width, figure_width), frameon=False)
+            
+            arr_in = correlation.loc[~response, 'Tres']
+            arr_out = correlation.loc[response, 'Tres']
+            
+            boxplot_one(plt, arr_in, 0, 'blue', flag_dot = True, marker='o')
+            boxplot_one(plt, arr_out, 1, 'red', flag_dot = True, marker='v')
+            
+            plt.ylabel('Correlation')
+            
+            if treatment.find('COVID19') == 0:
+                labels = ['Severe', 'Mild']
+            else:
+                labels = ['Non-responder', 'Responder']
+            
+            plt.xticks([0, 1], labels, rotation=30, ha='right')
+            
+            plt.tick_params(pad=10)
+            plt.axhline(0, ls='--', color='grey')
+            
+            z, p = stats.ranksums(arr_in, arr_out)
+            print('z =',z, 'P =',p)    
+            plt.title('P = %.1e' % p, fontsize=font_size)
+            
+            fig.savefig(output + '.boxplot.pdf', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+            
+            plot_lst = []
+            
+            for title, arr in correlation.items():
+                plot_lst.append([title, response, arr])
+            
+            ROC_plot(plot_lst, output + '.ROC')
+            
+        else:
+            out = output + '.%s' % response.columns[0].split()[0]
+            
+            # part 1: Cox-PH Wald test for all metrics
+            cf = CoxPHFitter(penalizer=1e-3)
+            
+            metrics = []
+            
+            for title, arr in correlation.items():
+                data = pandas.concat([response, arr], axis=1, join='inner')
+                cf.fit(data, data.columns[0], event_col=data.columns[1])
+                metrics.append(cf.summary.loc[arr.name])
+            
+            metrics = pandas.concat(metrics, axis=1, join='inner')    
+            
+            fig = plt.figure(figsize = (figure_width, figure_width), frameon=False)
+            plt.bar(metrics.columns, metrics.loc['z'])
+            plt.ylabel('Risk z-score')
+            plt.xticks(rotation=30, ha='right')
+            fig.savefig(out + '.bar.pdf', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+            
+            z, p = metrics.loc['z', 'Tres'], metrics.loc['p', 'Tres']
+            print('z =',z, 'P =',p)
+            
+            # part 2: KM plot for Tres
+            kmf = KaplanMeierFitter()
+    
+            fig = plt.figure(figsize = (figure_width, figure_width), frameon=False)
+            
+            flag = correlation.loc[:, 'Tres'] > 0
+            
+            kmf.fit(response.iloc[:,0].loc[flag], response.iloc[:,1].loc[flag], label= 'Tres > 0 (n=%d)' % sum(flag))
+            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='-')
+        
+            kmf.fit(response.iloc[:,0].loc[~flag], response.iloc[:,1].loc[~flag], label= 'Tres < 0 (n=%d)' % sum(~flag))
+            kmf.plot(ci_show=False, show_censors=True, linewidth=2, ls='--')
+            
+            plt.ylabel('Fraction')
+            plt.xlabel(response.columns[0])
+            plt.title('P = %.1e' % p, fontsize=font_size)
+            plt.legend(frameon=False)
+            
+            fig.savefig(out + '.kmplot.pdf', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+    
+    fin.close()
     
     return 0
 
