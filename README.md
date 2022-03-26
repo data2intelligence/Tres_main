@@ -16,10 +16,10 @@ After computing the correlation results for each dataset, you can run "./run.py"
 3, merge.Median.AUC: Area under the ROC curve to measure the quality signatures in "merge.Median", using T-cell persistance markers (Krishna et al., Science 2021) as the evaluation standard.  
 4, merge.signature: One overall Tres signature, which is the median across all datasets.  
 
-# Stage 3: predict clinical response of immune checkpoint blockade, CAR T, and adoptive cell transfer  
+# Stage 3: predict clinical response of immune checkpoint inhibitor (ICI), CAR T, and adoptive cell transfer  
 After creating the Tres signature, you can run "./predict.py" to evaluate qualities of therapy response predictions (Figure 2 in the manuscript). All results files are named as *.pdf in data/output.  
 
-**Task 1**: predict responder versus non-responder status using pretreatment samples:  
+**Task 1**: predict responder versus non-responder status using T cells from pretreatment tumors for ICI or infusion products for CAR T:  
 This task will analyze cohorts:  
 Atezolizumab+Paclitaxel\_Pre\_Zhang2021\_TNBC  
 CD19CAR\_Infusion\_Fraietta2018\_CLL  
@@ -30,17 +30,10 @@ anti-PD1\_Pre\_Yost2019\_BCC
 The clinical outcomes are responders or non-responders. Thus, we can generate Receiver Operating Characteristic (ROC) curves to compare signatures on predicting therapy response.  
 The result for each dataset will contains one boxplot (*.boxplot.pdf) and one ROC curve (*.ROC.pdf).  
 
-**Task 2**: predict cell therapy survival outcome using data from pre-manufacture samples:  
+**Task 2**: predict cell therapy survival outcome using data from pre-manufacture samples for CAR T or adoptive cell transfer (ACT):  
 This task will analyze cohorts:  
 CD19CAR\_Pre-manufacture_Chen2021\_Bcell  
 ACT\_Pre-expansion\_Lauss2017\_Melanoma  
 The clinical outcomes are survival durations and the sample expression profiles were taken before manufacturing the therapeutic T cells.  
 Thus, we can analyze whether correlation with the overall Tres signature can predict the survival outcome through Kaplan-Meier plots and Cox-PH regression.  
 The result for each dataset will contains one Kaplan-Meier plot (*.kmplot.pdf) and one barplot (*.bar.pdf) presenting Wald test risk z-scores.  
-
-**Task 3**: differentiate mild versus severe symptoms of COVID19 using diagnosis samples:  
-This task will analyze cohorts:  
-COVID19 severity\_Diagnosis\_SchulteSchrepping2020\_PBMC  
-COVID19 severity\_Diagnosis\_Su2020\_PBMC  
-The clinical outcomes are mild or severe patients. Thus, we can generate Receiver Operating Characteristic (ROC) curves to compare signatures on differentiate infection outcomes.  
-The result for each dataset will contains one boxplot (*.boxplot.pdf) and one ROC curve (*.ROC.pdf).  
