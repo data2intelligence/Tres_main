@@ -9,7 +9,7 @@ base_path = os.path.dirname(base_path)
 data_path = os.path.join(base_path, 'data')
 src_path = os.path.join(base_path, 'src')
 
-for url in ['https://hpc.nih.gov/~Jiang_Lab/Tres/sc_cohorts.tar.gz', 'https://resilience.ccr.cancer.gov/download/plots/evaluation.pickle.gz/']:
+for url in ['https://hpc.nih.gov/~Jiang_Lab/Tres/sc_cohorts.tar.gz', 'https://resilience.ccr.cancer.gov/download/evaluation.pickle.gz/']:
     f = os.path.basename(url.rstrip('/'))
     
     out = os.path.join(data_path, f)
